@@ -1,4 +1,5 @@
 use std::fs;
+use rand::Rng;
 
 mod types;
 mod ray_image;
@@ -18,11 +19,11 @@ fn main() {
     // RayImage
 
     let aspect_ratio = 16.0/9.0;
-    let width = 900;
+    let width = 400;
     let height = (width as f64 / aspect_ratio) as usize;
 
 
-    let samples_per_pixel = 1;
+    let samples_per_pixel = 100;
 
     let mut ray_image = ray_image::RayImage::empty(width, height, samples_per_pixel);
 
@@ -51,6 +52,7 @@ fn main() {
 }
 
 fn render_ray_image(ray_image: &mut RayImage, camera: &camera::Camera, world: &dyn Hittable) {
+    let mut rng = rand::thread_rng() ;
 
     let ray = camera.uv_ray(0.0, 0.0);
     let hit = ray_color(&ray, world);
@@ -63,19 +65,27 @@ fn render_ray_image(ray_image: &mut RayImage, camera: &camera::Camera, world: &d
     // and not a calucalted index = j * width + i
     // That would flip the ray_image in X axis
     let mut index = 0;
+
+
     for j in (0..ray_image.height).rev() {
         print!("\rScanLione remaining: {:?} ", j);
         for i in 0..ray_image.width {
 
-            let u = i as f64 / (ray_image.width - 1) as f64;
-            let v = j as f64 / (ray_image.height - 1) as f64;
+            let mut color = Vec3::default();
+
+            // TODO: Maybe don't store samples_per_pixel in ray_image. But in a general settings.
+            // And do the division here before we add to image data
+
+            for sample in 0..ray_image.samples_per_pixel {
+
+                let u = (i as f64 + rng.gen::<f64>())  / (ray_image.width - 1) as f64;
+                let v = (j as f64 + rng.gen::<f64>()) / (ray_image.height - 1) as f64;
 
 
-
-            let ray = camera.uv_ray(u, v);
-
-
-            ray_image.data[index] = ray_color(&ray, world);
+                let ray = camera.uv_ray(u, v);
+                color += ray_color(&ray, world);
+            }
+            ray_image.data[index] = color;
 
             index += 1;
 

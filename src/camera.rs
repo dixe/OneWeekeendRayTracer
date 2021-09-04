@@ -16,7 +16,7 @@ impl Camera {
 
     pub fn new(aspect_ratio: f64, viewport_height: f64) -> Self {
         let viewport_width = aspect_ratio * viewport_height;
-        let origin = Point::new(0.0, 0.0, 0.0);
+        let origin = Point::default();
         let horizontal = Vec3::new(viewport_width, 0.0, 0.0);
         let vertical = Vec3::new(0.0, viewport_height, 0.0);
         let focal_length = 1.0;
