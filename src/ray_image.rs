@@ -5,7 +5,6 @@ use image::{RgbImage, ImageBuffer};
 pub struct RayImage {
     pub height: usize,
     pub width: usize,
-    pub samples_per_pixel: usize,
     // pixel data in float
     pub data: Vec<Color>,
 
@@ -14,11 +13,10 @@ pub struct RayImage {
 
 impl RayImage {
 
-    pub fn empty(width: usize, height: usize, samples_per_pixel: usize) -> Self {
+    pub fn empty(width: usize, height: usize) -> Self {
         Self {
             width,
             height,
-            samples_per_pixel,
             data: vec![Color::default(); width * height],
         }
     }
@@ -47,11 +45,12 @@ impl RayImage {
 
             let index = pixel_index;
 
-            let color = self.data[index] / (self.samples_per_pixel as f64);
+            let color = self.data[index];
 
-            let r = (255.999 * color.x) as u8;
-            let g = (255.999 * color.y) as u8;
-            let b = (255.999 * color.z) as u8;
+            // use sqrt for gamme 2.0
+            let r = (255.999 * f64::sqrt(color.x).clamp(0.0, 0.999)) as u8;
+            let g = (255.999 * f64::sqrt(color.y).clamp(0.0, 0.999)) as u8;
+            let b = (255.999 * f64::sqrt(color.z).clamp(0.0, 0.999)) as u8;
 
             res.push(r);
             res.push(g);

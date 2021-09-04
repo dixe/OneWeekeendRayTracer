@@ -1,7 +1,7 @@
 use nalgebra as na;
 use crate::types::*;
 use crate::ray::Ray;
-
+use crate::vec_utils::{random_in_unit_sphere};
 
 mod hittable_list;
 pub use self::hittable_list::*;
@@ -20,6 +20,15 @@ impl HitRecord {
 
     pub fn normal(&self) -> Vec3 {
         *self.normal
+    }
+
+    pub fn random_ray(&self) -> Ray {
+
+        // TODO: make sure the normal is on the same side as the ray
+        let target = self.point + *self.normal + random_in_unit_sphere();
+
+        Ray::new(self.point, target - self.point)
+
     }
 }
 
