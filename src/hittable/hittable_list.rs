@@ -22,8 +22,8 @@ impl<'a> HittableList<'a> {
 
 
 impl Hittable for HittableList<'_> {
-    fn hit(&self, ray: &Ray, t_min: f64, t_max: f64) -> Option<HitRecord> {
 
+    fn hit(&self, ray: &Ray, t_min: f64, t_max: f64) -> Option<HitRecord> {
         let mut current_hit_record= None;
 
         for object in &self.objects {
@@ -35,7 +35,7 @@ impl Hittable for HittableList<'_> {
                             current_hit_record = Some(new_hit);
                         },
                         Some(current_hit) => {
-                            if new_hit.t < current_hit.t {
+                            if new_hit.t() < current_hit.t() {
                                 current_hit_record = Some(new_hit);
                             }
 
@@ -44,9 +44,7 @@ impl Hittable for HittableList<'_> {
                 },
                 None => {}
             };
-
         }
-
 
         current_hit_record
     }

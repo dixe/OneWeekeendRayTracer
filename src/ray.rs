@@ -25,6 +25,10 @@ impl Ray {
         *self.dir
     }
 
+    pub fn unit_dir(&self) -> na::Unit<Vec3> {
+        self.dir
+    }
+
 
     pub fn at(&self, t: f64) -> Point {
         self.origin + t * (*self.dir)

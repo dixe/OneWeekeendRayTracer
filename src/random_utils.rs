@@ -27,3 +27,20 @@ pub fn random_in_unit_sphere() -> Vec3 {
     }
     panic!("Exited loop without return");
 }
+
+
+pub fn random_unit_vector() -> Vec3 {
+    random_in_unit_sphere().normalize()
+}
+
+
+
+pub fn random_in_hemisphere(normal: &Vec3) -> Vec3 {
+    let mut in_unit_sphere = random_in_unit_sphere();
+
+    if normal.dot(&in_unit_sphere) <= 0.0 {
+        in_unit_sphere = -in_unit_sphere;
+    }
+
+    in_unit_sphere
+}

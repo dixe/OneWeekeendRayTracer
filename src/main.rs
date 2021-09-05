@@ -6,7 +6,9 @@ mod ray_image;
 mod ray;
 mod camera;
 mod hittable;
-mod vec_utils;
+mod random_utils;
+mod material;
+
 
 use types::*;
 use ray_image::*;
@@ -30,7 +32,7 @@ fn main() {
 
     let params = Parameters {
         samples_per_pixel: 100,
-        max_depth: 10,
+        max_depth: 50,
     };
 
     let mut ray_image = ray_image::RayImage::empty(width, height);
@@ -103,12 +105,10 @@ fn ray_color(ray: &Ray, world: &dyn Hittable, depth: u32) -> Color {
     if depth <= 0 {
         return Color::default();
     }
-    match world.hit(&ray, 0.001, f64::MAX) {
-        None => {},
-        Some(hit) => {
-            let new_ray = hit.random_ray();
-            return 0.5 * ray_color(&new_ray, world, depth - 1);
-        }
+
+    if let Some(hit) = world.hit(&ray, 0.001, f64::MAX) {
+        let new_ray = hit.random_diffuse_ray();
+        return 0.5 * ray_color(&new_ray, world, depth - 1);
     }
 
 
