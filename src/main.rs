@@ -1,6 +1,7 @@
 use std::fs;
 use rand::Rng;
 
+// Mods
 mod types;
 mod ray_image;
 mod ray;
@@ -10,14 +11,18 @@ mod random_utils;
 mod material;
 
 
+// Imports
 use types::*;
 use ray_image::*;
 use ray::{Ray};
 use hittable::*;
+use material::*;
 
-struct Parameters {
+
+struct Parameters<'a> {
     samples_per_pixel: u32,
-    max_depth: u32
+    max_depth: u32,
+    materials: Vec::<&'a dyn Material>,
 }
 
 fn main() {
@@ -30,22 +35,39 @@ fn main() {
     let height = (width as f64 / aspect_ratio) as usize;
 
 
+
+    // World
+    let material_ground = Lambertian::new(Color::new(0.8, 0.8, 0.0));
+    let material_center = Lambertian::new(Color::new(0.7, 0.3, 0.3));
+    let material_left = Metal::new(Color::new(0.8, 0.8, 0.8));
+    let material_right = Metal::new(Color::new(0.8, 0.6, 0.2));
+
+
+    let materials : Vec::<& dyn Material> = vec![&material_ground, &material_center, &material_left, &material_right];
+
+
+    // TODO: Maybe use shared pointer RC instead of a usize index into array
+    let sphere_ground = Sphere::new(Point::new(0.0,  -100.5,  -1.0), 100.0, 0);
+    let sphere_center = Sphere::new(Point::new(0.0 ,    0.0,  -1.0),   0.5,   1);
+    let sphere_left =   Sphere::new(Point::new(-1.0,    0.0,  -1.0),   0.5,   2);
+    let sphere_right =  Sphere::new(Point::new(1.0,     0.0,  -1.0),   0.5,   3);
+
+
+    let mut world = HittableList::new();
+    world.add(&sphere_ground);
+    world.add(&sphere_center);
+    world.add(&sphere_left);
+    world.add(&sphere_right);
+
+
     let params = Parameters {
         samples_per_pixel: 100,
         max_depth: 50,
+        materials: materials,
     };
 
     let mut ray_image = ray_image::RayImage::empty(width, height);
 
-
-    // World
-    let sphere_origin = Point::new(0.0, 0.0, -1.0);
-    let sphere_1 = Sphere::new(sphere_origin, 0.5);
-    let sphere_2 = Sphere::new(Point::new(0.0,-100.5,-1.0), 100.0);
-
-    let mut world = HittableList::new();
-    world.add(&sphere_1);
-    world.add(&sphere_2);
 
 
     // Camera
@@ -84,7 +106,7 @@ fn render_ray_image(ray_image: &mut RayImage, camera: &camera::Camera, world: &d
 
 
                 let ray = camera.uv_ray(u, v);
-                color += ray_color(&ray, world, params.max_depth);
+                color += ray_color(&ray, world, params.max_depth, &params.materials);
             }
 
             ray_image.data[index] = color / (params.samples_per_pixel as f64);
@@ -98,19 +120,28 @@ fn render_ray_image(ray_image: &mut RayImage, camera: &camera::Camera, world: &d
 
 
 
-fn ray_color(ray: &Ray, world: &dyn Hittable, depth: u32) -> Color {
-
-    // if we hit the sphere use that color
+fn ray_color(ray: &Ray, world: &dyn Hittable, depth: u32, materials: &Vec::<& dyn Material>) -> Color {
 
     if depth <= 0 {
         return Color::default();
     }
 
+    // if we hit the sphere use that colro
     if let Some(hit) = world.hit(&ray, 0.001, f64::MAX) {
-        let new_ray = hit.random_diffuse_ray();
-        return 0.5 * ray_color(&new_ray, world, depth - 1);
-    }
 
+        match materials[hit.material_id()].scatter(ray, &hit) {
+            Some(scatter) => {
+                // TODO: rename to attenuation
+                let c: Color = scatter.color;
+
+                let r_c: Color = ray_color(&scatter.ray, world, depth - 1, &materials);
+                return c.mul(&r_c);
+            },
+            None => {
+                return Color::default();
+            }
+        };
+    }
 
     // not hit, use background color
     let dir = ray.dir();

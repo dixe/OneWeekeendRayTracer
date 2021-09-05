@@ -13,8 +13,8 @@ pub use self::metal::*;
 
 
 pub struct Scatter {
-    ray: Ray,
-    color: Color
+    pub ray: Ray,
+    pub color: Color
 }
 
 pub trait Material {

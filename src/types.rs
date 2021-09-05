@@ -49,8 +49,21 @@ impl Reflection for na::Unit<na::Vector3::<f64>> {
     fn reflect(&self, normal: &na::Unit::<Vec3>) -> Vec3 {
         let n = **normal;
         let v = **self;
-        v - 2.0 * n.dot(&n) * n
+        // THis is - in the online book, but our normals points out not in
+        v + 2.0 * n.dot(&n) * n
 
+    }
+
+}
+
+
+pub trait PairMul {
+    fn mul(&self, other: &Self) -> Self;
+}
+
+impl PairMul for na::Vector3::<f64> {
+    fn mul(&self, other: &Self) -> Self {
+        Vec3::new(self.x * other.x, self.y * other.y, self.z * other.z)
     }
 
 }

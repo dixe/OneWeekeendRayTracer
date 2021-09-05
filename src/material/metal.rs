@@ -22,10 +22,12 @@ impl Material for Metal {
 
         match hit_record.reflected_ray(ray_in) {
             None => None,
-            Some(scatter_ray) =>         Some(Scatter {
-                ray: scatter_ray,
-                color: self.albedo
-            })
+            Some(scatter_ray) =>{
+                Some(Scatter {
+                    ray: scatter_ray,
+                    color: self.albedo
+                })
+            }
         }
 
     }

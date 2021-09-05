@@ -2,19 +2,21 @@ use crate::hittable::*;
 use crate::types::*;
 use crate::random_utils::{random_in_hemisphere, random_in_unit_sphere, random_unit_vector};
 use crate::ray::Ray;
-
+use crate::material::*;
 
 pub struct Sphere {
     center: Point,
-    radius: f64
+    radius: f64,
+    material_id: usize,
 }
 
 impl Sphere {
 
-    pub fn new(center: Point, radius: f64) -> Self {
+    pub fn new(center: Point, radius: f64, material_id: usize) -> Self {
         Self {
             center,
-            radius
+            radius,
+            material_id
         }
     }
 }
@@ -54,7 +56,7 @@ impl Hittable for Sphere {
         let point = ray.at(t);
         let normal = (point - self.center) / self.radius;
 
-        return Some(HitRecord::new(t, point, normal));
+        return Some(HitRecord::new(t, point, normal, self.material_id));
 
     }
 

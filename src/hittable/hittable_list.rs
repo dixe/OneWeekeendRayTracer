@@ -34,7 +34,7 @@ impl Hittable for HittableList<'_> {
                         None => {
                             current_hit_record = Some(new_hit);
                         },
-                        Some(current_hit) => {
+                        Some(ref current_hit) => {
                             if new_hit.t() < current_hit.t() {
                                 current_hit_record = Some(new_hit);
                             }
