@@ -22,7 +22,6 @@ impl Camera {
         let focal_length = 1.0;
         let lower_left_corner = origin - horizontal/2.0 - vertical/2.0 - Vec3::new(0.0, 0.0, focal_length);
 
-        println!("Lower left corner {:?}", lower_left_corner);
         Self {
             viewport_height,
             viewport_width,
@@ -33,27 +32,6 @@ impl Camera {
             lower_left_corner,
         }
     }
-
-
-    /*
-    pub fn lower_left_corner(&self) -> Vec3 {
-    self.lower_left_corner
-}
-
-    pub fn origin(&self) -> Vec3 {
-    self.origin
-}
-
-    pub fn horizontal(&self) -> Vec3 {
-    self.horizontal
-}
-
-
-    pub fn vertical(&self) -> Vec3 {
-    self.vertical
-}
-
-     */
 
     pub fn uv_ray(&self, u: f64, v: f64) -> ray::Ray {
 

@@ -1,5 +1,10 @@
 use std::fs;
 use rand::Rng;
+use std::time::Instant;
+use std::sync::mpsc::{Sender, Receiver, TryRecvError};
+use std::sync::mpsc;
+use std::sync::Arc;
+use std::thread;
 
 // Mods
 mod types;
@@ -23,15 +28,18 @@ struct Parameters<'a> {
     samples_per_pixel: u32,
     max_depth: u32,
     materials: Vec::<&'a dyn Material>,
+    height: usize,
+    width: usize,
+    threads: u32
 }
 
-fn main() {
 
+fn main() {
 
     // RayImage
 
     let aspect_ratio = 16.0/9.0;
-    let width = 400;
+    let width = 1920;
     let height = (width as f64 / aspect_ratio) as usize;
 
 
@@ -48,7 +56,7 @@ fn main() {
 
     // TODO: Maybe use shared pointer RC instead of a usize index into array
     let sphere_ground = Sphere::new(Point::new(0.0,  -100.5,  -1.0), 100.0, 0);
-    let sphere_center = Sphere::new(Point::new(0.0 ,    0.0,  -1.0),   0.5,   1);
+    let sphere_center = Sphere::new(Point::new(0.0 ,    0.0,  -1.5),   0.5,   1);
     let sphere_left =   Sphere::new(Point::new(-1.0,    0.0,  -1.0),   0.5,   2);
     let sphere_right =  Sphere::new(Point::new(1.0,     0.0,  -1.0),   0.5,   3);
 
@@ -64,6 +72,9 @@ fn main() {
         samples_per_pixel: 100,
         max_depth: 50,
         materials: materials,
+        width,
+        height,
+        threads: 10
     };
 
     let mut ray_image = ray_image::RayImage::empty(width, height);
@@ -83,40 +94,264 @@ fn main() {
 
 }
 
-fn render_ray_image(ray_image: &mut RayImage, camera: &camera::Camera, world: &dyn Hittable, params: &Parameters) {
-    let mut rng = rand::thread_rng() ;
 
+#[derive(Clone, Copy)]
+struct Work {
+    i: usize,
+    j: usize,
+    index: usize
+}
+
+
+#[derive(Clone, Copy)]
+struct ThreadResult {
+    color: Color,
+    index: usize
+}
+
+
+
+#[derive(Clone, Copy)]
+enum SlaveMessage {
+    RequestWork,
+    WorkDone(ThreadResult),
+}
+
+#[derive(Clone, Copy)]
+enum MasterMessage {
+    DoWork(Work),
+    Done
+}
+
+struct Worker<T> {
+    mosi: Sender<MasterMessage>,
+    miso: Receiver<SlaveMessage>,
+    handle: thread::JoinHandle<T>,
+    done: bool
+}
+
+#[derive(Clone, Copy)]
+struct ThreadWorkingData {
+    params: usize, // &'a Parameters<'a>,
+    camera: usize, // &'a camera::aCamera,
+    world: usize
+}
+
+
+fn render_ray_image(ray_image: &mut RayImage, camera: &camera::Camera, world: &HittableList, params: &Parameters) {
     // writte from left to right, top to bottom.
     // Thats why we do .rev on j and use an incrementing index
     // and not a calucalted index = j * width + i
     // That would flip the ray_image in X axis
     let mut index = 0;
 
+    let mut max_iter_time = 0;
+    let mut min_iter_time = u128::MAX;
 
+
+    //make list of work
+    let mut work_tasks = Vec::new();
     for j in (0..ray_image.height).rev() {
-        print!("\rScanLione remaining: {:?} ", j);
+
         for i in 0..ray_image.width {
-
-            let mut color = Vec3::default();
-
-            for sample in 0..params.samples_per_pixel {
-
-                let u = (i as f64 + rng.gen::<f64>()) / (ray_image.width - 1) as f64;
-                let v = (j as f64 + rng.gen::<f64>()) / (ray_image.height - 1) as f64;
-
-
-                let ray = camera.uv_ray(u, v);
-                color += ray_color(&ray, world, params.max_depth, &params.materials);
-            }
-
-            ray_image.data[index] = color / (params.samples_per_pixel as f64);
-
+            work_tasks.push(Work {i,j, index});
             index += 1;
-
         }
     }
-    println!("\nDone");
+
+    println!("h {} w {:?} len {}", params.height, params.width, work_tasks.len());
+
+    let mut children = Vec::new();
+
+    let work_data = ThreadWorkingData {
+        camera: (camera as *const camera::Camera) as usize,
+        params: (params as *const Parameters) as usize,
+        world: (world as *const HittableList ) as usize
+    };
+
+
+    for id in 0..params.threads {
+
+        let (miso_sender, miso_rec): (Sender<SlaveMessage>, Receiver<SlaveMessage>) = mpsc::channel();
+
+        let (mosi_sender, mosi_rec): (Sender<MasterMessage>, Receiver<MasterMessage>) = mpsc::channel();
+
+
+        let t_data = work_data.clone();
+        let child = thread::spawn(move || {
+            let mut run = true;
+
+            while run {
+                miso_sender.send(SlaveMessage::RequestWork);
+                let response = mosi_rec.recv();
+
+                match response {
+                    Ok(resp) => {
+
+                        match resp {
+                            MasterMessage::Done => { run = false;},
+                            MasterMessage::DoWork(work) => {
+                                // to the work of ray and send result back
+
+                                let world;
+                                let camera;
+                                let params;
+                                unsafe {
+                                    world = & *(t_data.world as * const HittableList);
+                                    params = & *(t_data.params as * const Parameters);
+                                    camera = & *(t_data.camera as * const camera::Camera);
+                                }
+
+                                let color = caclulate_pixel_color(work.i, work.j, camera, world, params);
+
+
+                                let res = ThreadResult {
+                                    color,
+                                    index: work.index
+                                };
+                                miso_sender.send(SlaveMessage::WorkDone(res));
+                            }
+                        };
+                    },
+                    Err(_) => {run = false}
+                }
+            }
+        });
+
+        children.push(Worker{ handle: child, miso: miso_rec, mosi: mosi_sender, done: false});
+
+    }
+
+    let mut work_index = 0;
+    let mut work_left = true;
+    let now = Instant::now();
+    println!("");
+
+    while work_left {
+
+        let mut all_done = true;
+        for worker in children.iter_mut() {
+            if worker.done {
+                continue;
+            }
+
+            match worker.miso.try_recv() {
+                Ok(msg) => {
+                    match msg {
+                        SlaveMessage::RequestWork => {
+                            if work_index < work_tasks.len() {
+                                worker.mosi.send(MasterMessage::DoWork(work_tasks[work_index]));
+                                work_index += 1;
+
+                            }
+                            else {
+                                worker.mosi.send(MasterMessage::Done);
+                            }
+                        },
+                        SlaveMessage::WorkDone(t_res) => {
+                            ray_image.data[t_res.index] = t_res.color;
+                        }
+
+                    };
+
+                },
+                Err(TryRecvError::Empty) => {}
+                Err(TryRecvError::Disconnected) => {
+                    worker.done = true;
+                }
+            };
+
+            all_done &= worker.done;
+        }
+
+        work_left = !all_done;
+    }
+
+    let elapsed = now.elapsed();
+
+
+    println!("it tool {:?}", elapsed.as_secs());
+
+
+
+    /*
+    for work in &work_tasks {
+    println!("\rScanLione remaining: {:?} ", work.j);
+    let now = Instant::now();
+    println!("");
+
+
+    let elapsed = now.elapsed();
+
+
+    max_iter_time = u128::max(elapsed.as_millis(), max_iter_time);
+    min_iter_time = u128::min(elapsed.as_millis(), min_iter_time);
+
+
+    let color = caclulate_pixel_color(work.i, work.j, camera, world, params);
+    assign(&mut *work.result_pointer, color);
+
+    println!("address P {:?}", work.result_pointer as usize);
+    let index_p = &mut ray_image.data[index] as *mut Vec3;
+    println!("address index {:?}", index_p as usize);
+
+
 }
+
+
+    panic!();
+    let elapsed = now.elapsed();
+
+    max_iter_time = u128::max(elapsed.as_millis(), max_iter_time);
+    min_iter_time = u128::min(elapsed.as_millis(), min_iter_time);
+
+
+
+
+
+    for j in (0..ray_image.height).rev() {
+    print!("\rScanLione remaining: {:?} ", j);
+    for i in 0..ray_image.width {
+
+    let now = Instant::now();
+    let mut color = caclulate_pixel_color(i,j, camera, world, params);
+
+    ray_image.data[index] = color / (params.samples_per_pixel as f64);
+
+
+
+    let elapsed = now.elapsed();
+
+
+    max_iter_time = u128::max(elapsed.as_millis(), max_iter_time);
+    min_iter_time = u128::min(elapsed.as_millis(), min_iter_time);
+
+
+}
+}
+
+     */
+}
+
+
+fn caclulate_pixel_color(i: usize, j: usize, camera: &camera::Camera, world: &dyn Hittable, params: &Parameters) -> Color {
+    let mut color = Vec3::default();
+    let mut rng = rand::thread_rng() ;
+
+    for sample in 0..params.samples_per_pixel {
+
+        let u = (i as f64 + rng.gen::<f64>()) / (params.width - 1) as f64;
+        let v = (j as f64 + rng.gen::<f64>()) / (params.height - 1) as f64;
+
+
+        let ray = camera.uv_ray(u, v);
+        color += ray_color(&ray, world, params.max_depth, &params.materials);
+    }
+
+    color / (params.samples_per_pixel as f64)
+
+}
+
 
 
 
