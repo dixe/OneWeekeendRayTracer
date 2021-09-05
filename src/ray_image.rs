@@ -22,14 +22,6 @@ impl RayImage {
     }
 
 
-
-    pub fn insert_ij_data(&mut self, i: f64, j: f64, color: Color) {
-
-
-    }
-
-
-
     pub fn save_png(&self, path: &str) {
 
         let img: RgbImage = ImageBuffer::from_vec(self.width as u32, self.height as u32, self.rbg_image_data()).unwrap();
