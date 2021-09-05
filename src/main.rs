@@ -40,7 +40,7 @@ fn main() {
     // RayImage
 
     let aspect_ratio = 16.0/9.0;
-    let width = 1920;
+    let width = 400;
     let height = (width as f64 / aspect_ratio) as usize;
 
 
@@ -181,7 +181,6 @@ fn render_ray_image_random_distributed(ray_image: &mut RayImage, camera: &camera
     let mut work_index = 0;
     for id in 0..params.extra_threads {
 
-
         let mut thread_tasks = Vec::new();
         for i in work_index..(thread_work_count + work_index) {
             thread_tasks.push(work_tasks[i]);
@@ -191,6 +190,7 @@ fn render_ray_image_random_distributed(ray_image: &mut RayImage, camera: &camera
         let t_data = work_data.clone();
 
         let child = thread::spawn(move || {
+
             let world;
             let camera;
             let params;
@@ -219,7 +219,7 @@ fn render_ray_image_random_distributed(ray_image: &mut RayImage, camera: &camera
 
 
     // to over last work and then join with children to make the final image
-    for index in work_index..(thread_work_count + work_index) {
+    for index in work_index..work_tasks.len() {
         let work = work_tasks[index];
         ray_image.data[work.index] = caclulate_pixel_color(work.i, work.j, camera, world, params);
 
