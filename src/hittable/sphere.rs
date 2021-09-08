@@ -56,6 +56,10 @@ impl HittableFuncs for Sphere {
         let point = ray.at(t);
         let normal = (point - self.center) / self.radius;
 
+        if t == 0.0 {
+            panic!("ZERO ZERO D");
+        }
+        //panic!("{:?}",normal);
         return Some(HitRecord::new(t, point, normal, self.material_id));
 
     }

@@ -37,7 +37,7 @@ struct Parameters {
 
 static mut PARAMS: Parameters = Parameters {
     samples_per_pixel: 100,
-    max_depth: 50,
+    max_depth: 20,
     materials: Vec::new(),
     width: 1920,
     height: 1080,
@@ -46,6 +46,8 @@ static mut PARAMS: Parameters = Parameters {
 
 static mut CAMERA: Option<camera::Camera> = None;
 static mut WORLD: Option<HittableList> = None;
+
+
 fn main() {
 
     // RayImage
@@ -56,6 +58,39 @@ fn main() {
 
 
 
+    //setup_world_1(width, height);
+
+    setup_world_square_test(width, height);
+
+    let mut ray_image = ray_image::RayImage::empty(width, height);
+
+
+    // Camera
+
+    let viewport_height = 2.0;
+    unsafe {
+        CAMERA = Some(camera::Camera::new(aspect_ratio, viewport_height));
+    }
+
+
+    // Render
+
+    let now = Instant::now();
+    //render_ray_image_master_slave(&mut ray_image, &camera, &world, &params);
+    unsafe {
+        render_ray_image_random_distributed(&mut ray_image, CAMERA.as_ref().unwrap(), WORLD.as_ref().unwrap(), &PARAMS);
+    }
+
+    let elapsed = now.elapsed();
+
+    println!("It took {:?}", elapsed.as_secs());
+
+    ray_image.save_png("test.png");
+
+}
+
+
+fn setup_world_1(width: usize, height: usize) {
     // World
     let material_ground = Material::lambertian(Color::new(0.8, 0.8, 0.0));
     let material_center = Material::lambertian(Color::new(0.7, 0.3, 0.3));
@@ -90,32 +125,38 @@ fn main() {
         WORLD = Some(world);
     }
 
-    let mut ray_image = ray_image::RayImage::empty(width, height);
+}
 
 
-    // Camera
+fn setup_world_square_test(width: usize, height: usize) {
+    // World
+    let material_0 = Material::lambertian(Color::new(0.8, 0.8, 0.0));
 
-    let viewport_height = 2.0;
+    let material_met = Material::metal(Color::new(0.8, 0.6, 0.2));
+
     unsafe {
-        CAMERA = Some(camera::Camera::new(aspect_ratio, viewport_height));
+        PARAMS.materials.push(material_0);
+        PARAMS.materials.push(material_met);
+
+        PARAMS.width = width;
+        PARAMS.height = height;
     }
 
 
-    // Render
+    let square_1 = Hittable::Square(Square::new(Point::new(0.0,  0.0,  -1.0), 0.5, 0));
 
-    let now = Instant::now();
-    //render_ray_image_master_slave(&mut ray_image, &camera, &world, &params);
+    let sphere_center = Hittable::Sphere(Sphere::new(Point::new(1.0, 0.0, -1.5), 0.5, 1));
+
+    let mut world = HittableList::new();
+    world.add(square_1);
+    world.add(sphere_center);
+
     unsafe {
-        render_ray_image_random_distributed(&mut ray_image, CAMERA.as_ref().unwrap(), WORLD.as_ref().unwrap(), &PARAMS);
+        WORLD = Some(world);
     }
-
-    let elapsed = now.elapsed();
-
-    println!("It took {:?}", elapsed.as_secs());
-
-    ray_image.save_png("test.png");
 
 }
+
 
 
 #[derive(Clone, Copy)]
@@ -191,8 +232,6 @@ fn render_ray_image_random_distributed(ray_image: &mut RayImage, camera: &'stati
     };
 
 
-
-
     let mut children = Vec::new();
     let mut work_index = 0;
     for id in 0..params.extra_threads {
@@ -234,9 +273,7 @@ fn render_ray_image_random_distributed(ray_image: &mut RayImage, camera: &'stati
     for index in work_index..work_tasks.len() {
         let work = work_tasks[index];
         ray_image.data[work.index] = calculate_pixel_color(work.i, work.j, camera, world, params);
-
     }
-
 
 
     for child in children {
@@ -400,7 +437,7 @@ fn calculate_pixel_color(i: usize, j: usize, camera: &camera::Camera, world: &'s
 
 
 
-fn ray_color(ray: &Ray, world: &'static HittableList, depth: u32, materials: &Vec::<Material>) -> Color {
+fn ray_color(ray: &Ray, world: &HittableList, depth: u32, materials: &Vec::<Material>) -> Color {
 
     if depth <= 0 {
         return Color::default();
@@ -415,9 +452,12 @@ fn ray_color(ray: &Ray, world: &'static HittableList, depth: u32, materials: &Ve
                 let c: Color = scatter.color;
 
                 let r_c: Color = ray_color(&scatter.ray, world, depth - 1, &materials);
+                //println!("{:?}", scatter.ray.dir());
+
                 return c.mul(&r_c);
             },
             None => {
+                //panic!("No Scatter");
                 return Color::default();
             }
         };
