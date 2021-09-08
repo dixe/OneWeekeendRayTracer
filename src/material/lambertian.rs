@@ -2,7 +2,7 @@ use crate::types::*;
 use crate::material::*;
 
 
-
+#[derive(Copy,Clone)]
 pub struct Lambertian {
     albedo: Color
 }
@@ -16,7 +16,7 @@ impl Lambertian {
 }
 
 
-impl Material for Lambertian {
+impl MaterialFuncs for Lambertian {
 
     fn scatter(&self, ray_in: &Ray, hit_record: &HitRecord) -> Option<Scatter> {
 

@@ -1,6 +1,7 @@
 use crate::types::*;
 use crate::ray;
 
+#[derive(Clone)]
 pub struct Camera {
     viewport_width: f64,
     viewport_height: f64,

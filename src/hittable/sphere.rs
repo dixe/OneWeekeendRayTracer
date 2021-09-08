@@ -22,7 +22,7 @@ impl Sphere {
 }
 
 
-impl Hittable for Sphere {
+impl HittableFuncs for Sphere {
 
 
     fn hit(&self, ray: &Ray, t_min: f64, t_max: f64) -> Option<HitRecord> {

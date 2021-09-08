@@ -1,12 +1,10 @@
 use crate::hittable::*;
 
-pub struct HittableList<'a> {
-
-    objects: Vec::<&'a dyn Hittable>
-
+pub struct HittableList {
+    objects: Vec::<Hittable>
 }
 
-impl<'a> HittableList<'a> {
+impl HittableList {
 
     pub fn new() -> Self {
         Self {
@@ -14,14 +12,14 @@ impl<'a> HittableList<'a> {
         }
     }
 
-    pub fn add(&mut self, object: &'a dyn Hittable) {
+    pub fn add(&mut self, object: Hittable) {
         self.objects.push(object);
     }
 
 }
 
 
-impl Hittable for HittableList<'_> {
+impl HittableFuncs for HittableList {
 
     fn hit(&self, ray: &Ray, t_min: f64, t_max: f64) -> Option<HitRecord> {
         let mut current_hit_record= None;

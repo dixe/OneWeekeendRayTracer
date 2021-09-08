@@ -25,16 +25,27 @@ use hittable::*;
 use material::*;
 
 
-struct Parameters<'a> {
+struct Parameters {
     samples_per_pixel: u32,
     max_depth: u32,
-    materials: Vec::<&'a dyn Material>,
+    materials: Vec::<Material>,
     height: usize,
     width: usize,
     extra_threads: u32
 }
 
 
+static mut PARAMS: Parameters = Parameters {
+    samples_per_pixel: 100,
+    max_depth: 50,
+    materials: Vec::new(),
+    width: 1920,
+    height: 1080,
+    extra_threads: 30
+};
+
+static mut CAMERA: Option<camera::Camera> = None;
+static mut WORLD: Option<HittableList> = None;
 fn main() {
 
     // RayImage
@@ -46,37 +57,38 @@ fn main() {
 
 
     // World
-    let material_ground = Lambertian::new(Color::new(0.8, 0.8, 0.0));
-    let material_center = Lambertian::new(Color::new(0.7, 0.3, 0.3));
-    let material_left = Metal::new(Color::new(0.8, 0.8, 0.8));
-    let material_right = Metal::new(Color::new(0.8, 0.6, 0.2));
+    let material_ground = Material::lambertian(Color::new(0.8, 0.8, 0.0));
+    let material_center = Material::lambertian(Color::new(0.7, 0.3, 0.3));
+    let material_left = Material::metal(Color::new(0.8, 0.8, 0.8));
+    let material_right = Material::metal(Color::new(0.8, 0.6, 0.2));
 
 
-    let materials : Vec::<& dyn Material> = vec![&material_ground, &material_center, &material_left, &material_right];
+    unsafe {
+        PARAMS.materials.push(material_ground);
+        PARAMS.materials.push(material_center);
+        PARAMS.materials.push(material_left);
+        PARAMS.materials.push(material_right);
+        PARAMS.width = width;
+        PARAMS.height = height;
+    }
 
 
     // TODO: Maybe use shared pointer RC instead of a usize index into array
-    let sphere_ground = Sphere::new(Point::new(0.0,  -100.5,  -1.0), 100.0, 0);
-    let sphere_center = Sphere::new(Point::new(0.0 ,    0.0,  -1.5),   0.5,   1);
-    let sphere_left =   Sphere::new(Point::new(-1.0,    0.0,  -1.0),   0.5,   2);
-    let sphere_right =  Sphere::new(Point::new(1.0,     0.0,  -1.0),   0.5,   3);
+    let sphere_ground = Hittable::Sphere(Sphere::new(Point::new(0.0,  -100.5,  -1.0), 100.0, 0));
+    let sphere_center = Hittable::Sphere(Sphere::new(Point::new(0.0 ,    0.0,  -1.5),   0.5,   1));
+    let sphere_left =   Hittable::Sphere(Sphere::new(Point::new(-1.0,    0.0,  -1.0),   0.5,   2));
+    let sphere_right =  Hittable::Sphere(Sphere::new(Point::new(1.0,     0.0,  -1.0),   0.5,   3));
 
 
     let mut world = HittableList::new();
-    world.add(&sphere_ground);
-    world.add(&sphere_center);
-    world.add(&sphere_left);
-    world.add(&sphere_right);
+    world.add(sphere_ground);
+    world.add(sphere_center);
+    world.add(sphere_left);
+    world.add(sphere_right);
 
-
-    let params = Parameters {
-        samples_per_pixel: 100,
-        max_depth: 50,
-        materials: materials,
-        width,
-        height,
-        extra_threads: 30
-    };
+    unsafe {
+        WORLD = Some(world);
+    }
 
     let mut ray_image = ray_image::RayImage::empty(width, height);
 
@@ -84,14 +96,18 @@ fn main() {
     // Camera
 
     let viewport_height = 2.0;
-    let camera = camera::Camera::new(aspect_ratio, viewport_height);
+    unsafe {
+        CAMERA = Some(camera::Camera::new(aspect_ratio, viewport_height));
+    }
 
 
     // Render
 
     let now = Instant::now();
     //render_ray_image_master_slave(&mut ray_image, &camera, &world, &params);
-    render_ray_image_random_distributed(&mut ray_image, &camera, &world, &params);
+    unsafe {
+        render_ray_image_random_distributed(&mut ray_image, CAMERA.as_ref().unwrap(), WORLD.as_ref().unwrap(), &PARAMS);
+    }
 
     let elapsed = now.elapsed();
 
@@ -138,15 +154,15 @@ struct Worker {
 }
 
 #[derive(Clone, Copy)]
-struct ThreadWorkingData {
-    params: usize, // &'a Parameters<'a>,
-    camera: usize, // &'a camera::aCamera,
-    world: usize
+struct ThreadWorkingData<'a> {
+    params: &'a Parameters, // &'a Parameters<'a>,
+    camera: &'a camera::Camera,
+    world: &'a HittableList
 }
 
 
 
-fn render_ray_image_random_distributed(ray_image: &mut RayImage, camera: &camera::Camera, world: &HittableList, params: &Parameters){
+fn render_ray_image_random_distributed(ray_image: &mut RayImage, camera: &'static camera::Camera, world: &'static HittableList, params: &'static Parameters){
     let mut rng = rand::thread_rng() ;
 
     let mut index = 0;
@@ -169,9 +185,9 @@ fn render_ray_image_random_distributed(ray_image: &mut RayImage, camera: &camera
     println!("Each thread should to {:?} total work is {}", thread_work_count, work_tasks.len());
 
     let work_data = ThreadWorkingData {
-        camera: (camera as *const camera::Camera) as usize,
-        params: (params as *const Parameters) as usize,
-        world: (world as *const HittableList ) as usize
+        camera,
+        params,
+        world,
     };
 
 
@@ -191,20 +207,16 @@ fn render_ray_image_random_distributed(ray_image: &mut RayImage, camera: &camera
 
         let child = thread::spawn(move || {
 
-            let world;
-            let camera;
-            let params;
-            unsafe {
-                world = & *(t_data.world as * const HittableList);
-                params = & *(t_data.params as * const Parameters);
-                camera = & *(t_data.camera as * const camera::Camera);
-            }
+            let world = t_data.world;
+            let camera = t_data.camera;
+            let params = t_data.params;
+
 
             let mut res = vec![ThreadResult { color:Color::default(), index: 0 }; thread_tasks.len() ];
 
             for index in 0..thread_tasks.len() {
                 let work = thread_tasks[index];
-                let color = caclulate_pixel_color(work.i, work.j, camera, world, params);
+                let color = calculate_pixel_color(work.i, work.j, camera, world, params);
 
 
                 res[index].color = color;
@@ -221,7 +233,7 @@ fn render_ray_image_random_distributed(ray_image: &mut RayImage, camera: &camera
     // to over last work and then join with children to make the final image
     for index in work_index..work_tasks.len() {
         let work = work_tasks[index];
-        ray_image.data[work.index] = caclulate_pixel_color(work.i, work.j, camera, world, params);
+        ray_image.data[work.index] = calculate_pixel_color(work.i, work.j, camera, world, params);
 
     }
 
@@ -237,7 +249,7 @@ fn render_ray_image_random_distributed(ray_image: &mut RayImage, camera: &camera
 
 }
 
-fn render_ray_image_master_slave(ray_image: &mut RayImage, camera: &camera::Camera, world: &HittableList, params: &Parameters) {
+fn render_ray_image_master_slave(ray_image: &mut RayImage, camera: &'static camera::Camera, world: &'static HittableList, params: &'static Parameters) {
     // writte from left to right, top to bottom.
     // Thats why we do .rev on j and use an incrementing index
     // and not a calucalted index = j * width + i
@@ -305,13 +317,13 @@ fn render_ray_image_master_slave(ray_image: &mut RayImage, camera: &camera::Came
     }
 }
 
-fn spawn_threads(camera: &camera::Camera, world: &HittableList, params: &Parameters) -> Vec::<Worker> {
+fn spawn_threads(camera: &'static camera::Camera, world: &'static HittableList, params: &'static Parameters) -> Vec::<Worker> {
     let mut children = Vec::new();
 
     let work_data = ThreadWorkingData {
-        camera: (camera as *const camera::Camera) as usize,
-        params: (params as *const Parameters) as usize,
-        world: (world as *const HittableList ) as usize
+        camera,
+        params,
+        world,
     };
 
 
@@ -338,16 +350,12 @@ fn spawn_threads(camera: &camera::Camera, world: &HittableList, params: &Paramet
                             MasterMessage::DoWork(work) => {
                                 // to the work of ray and send result back
 
-                                let world;
-                                let camera;
-                                let params;
-                                unsafe {
-                                    world = & *(t_data.world as * const HittableList);
-                                    params = & *(t_data.params as * const Parameters);
-                                    camera = & *(t_data.camera as * const camera::Camera);
-                                }
+                                let world = t_data.world;
+                                let camera = t_data.camera;
+                                let params = t_data.params;
 
-                                let color = caclulate_pixel_color(work.i, work.j, camera, world, params);
+
+                                let color = calculate_pixel_color(work.i, work.j, camera, world, params);
 
 
                                 let res = ThreadResult {
@@ -371,7 +379,7 @@ fn spawn_threads(camera: &camera::Camera, world: &HittableList, params: &Paramet
 }
 
 
-fn caclulate_pixel_color(i: usize, j: usize, camera: &camera::Camera, world: &dyn Hittable, params: &Parameters) -> Color {
+fn calculate_pixel_color(i: usize, j: usize, camera: &camera::Camera, world: &'static HittableList, params: &Parameters) -> Color {
     let mut color = Vec3::default();
     let mut rng = rand::thread_rng() ;
 
@@ -392,7 +400,7 @@ fn caclulate_pixel_color(i: usize, j: usize, camera: &camera::Camera, world: &dy
 
 
 
-fn ray_color(ray: &Ray, world: &dyn Hittable, depth: u32, materials: &Vec::<& dyn Material>) -> Color {
+fn ray_color(ray: &Ray, world: &'static HittableList, depth: u32, materials: &Vec::<Material>) -> Color {
 
     if depth <= 0 {
         return Color::default();

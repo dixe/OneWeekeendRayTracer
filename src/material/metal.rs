@@ -2,7 +2,7 @@ use crate::types::*;
 use crate::material::*;
 
 
-
+#[derive(Copy,Clone)]
 pub struct Metal {
     albedo: Color
 }
@@ -15,8 +15,7 @@ impl Metal {
     }
 }
 
-
-impl Material for Metal {
+impl MaterialFuncs for Metal {
 
     fn scatter(&self, ray_in: &Ray, hit_record: &HitRecord) -> Option<Scatter> {
 
