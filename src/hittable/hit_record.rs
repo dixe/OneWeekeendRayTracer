@@ -4,7 +4,7 @@ use crate::ray::Ray;
 use nalgebra as na;
 use crate::material::*;
 
-
+#[derive(Clone, Copy)]
 pub struct HitRecord {
     point: Point,
     // Face normal. Always points outward, in book they always point toward ray, might cause some bugs when just following along

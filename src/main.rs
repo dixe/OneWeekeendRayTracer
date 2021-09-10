@@ -145,11 +145,14 @@ fn setup_world_square_test(width: usize, height: usize) {
 
     let square_1 = Hittable::Square(Square::new(Point::new(0.0,  0.0,  -1.0), 0.5, 0));
 
-    let sphere_center = Hittable::Sphere(Sphere::new(Point::new(1.0, 0.0, -1.5), 0.5, 1));
+    let sphere_right = Hittable::Sphere(Sphere::new(Point::new(1.5, 0.0, -1.0), 0.5, 1));
+
+    let sphere_top = Hittable::Sphere(Sphere::new(Point::new(-0.7, 1.0, -1.0), 0.5, 1));
 
     let mut world = HittableList::new();
     world.add(square_1);
-    world.add(sphere_center);
+    world.add(sphere_right);
+    world.add(sphere_top);
 
     unsafe {
         WORLD = Some(world);
